@@ -68,19 +68,21 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
         key = f"schedule:{area.id}:{slot.isoformat()}"
         if session.scalar(select(Job.id).where(Job.idempotency_key == key)) is not None:
             continue
-        version = selected_version(session, settings)
-        if version not in BASELINE_VERSIONS:
-            try:
+        try:
+            version = selected_version(session, settings, mode=RunMode.LIVE)
+            if version not in BASELINE_VERSIONS:
                 resolve_approved(session, settings, version, region=area, mode=RunMode.LIVE)
-            except ModelRegistryError:
-                # Do not fill the queue with work outside a historical model's review.
-                continue
+        except ModelRegistryError:
+            # Skip inadmissible new work while allowing the worker to drain frozen jobs.
+            continue
         payload = dict(
             schema_version="jobs-v1",
             region_id=str(area.id),
             mode="live",
             as_of=slot.isoformat(),
-            window_start=(slot - timedelta(hours=48)).isoformat(),
+            window_start=(
+                slot - timedelta(hours=min(48, settings.max_refresh_window_hours))
+            ).isoformat(),
             window_end=slot.isoformat(),
             scorer_version=version,
             feature_version=settings.feature_schema_version,

@@ -211,8 +211,11 @@
             "type": "string"
           },
           "scope": {
-            "const": "referenced_local_files",
             "default": "referenced_local_files",
+            "enum": [
+              "referenced_local_files",
+              "referenced_sources_and_local_model"
+            ],
             "title": "Scope",
             "type": "string"
           },
@@ -1334,6 +1337,17 @@
             "description": "Recent observations in the live head; not proof of continuous ingestion.",
             "title": "Recent Live Data Available",
             "type": "boolean"
+          },
+          "scorer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Live scorer capabilities, independent of historical selection."
           }
         },
         "title": "LiveReadiness",
@@ -2511,7 +2525,7 @@
             "$ref": "#/components/schemas/Freshness"
           },
           "integrity_notice": {
-            "default": "Local hashes detect changes relative to the saved digest; an attacker controlling both can rewrite both. A matching independently anchored digest supplies a separate comparison point. Local-chain anchoring is a demonstration, not independent public notarization. Integrity does not prove a fire is real or a model is correct. Artifact checks cover referenced local file bytes, not scientific validity or approval.",
+            "default": "Local hashes detect changes relative to the saved digest; an attacker controlling both can rewrite both. A matching independently anchored digest supplies a separate comparison point. Local-chain anchoring is a demonstration, not independent public notarization. Integrity does not prove a fire is real or a model is correct. Artifact checks cover referenced source and model bytes, not scientific validity or approval.",
             "title": "Integrity Notice",
             "type": "string"
           },

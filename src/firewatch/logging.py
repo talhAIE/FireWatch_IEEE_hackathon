@@ -71,7 +71,12 @@ def install_redaction(settings: Settings) -> Callable[[], None]:
     password = make_url(settings.database_url.get_secret_value()).password
     if password:
         raw.append(password)
-    for secret in (settings.firms_map_key, settings.chain_private_key, settings.postgres_password):
+    for secret in (
+        settings.firms_map_key,
+        settings.chain_private_key,
+        settings.postgres_password,
+        settings.supabase_secret_key,
+    ):
         if secret is not None:
             raw.append(secret.get_secret_value())
     if settings.chain_private_key is not None:

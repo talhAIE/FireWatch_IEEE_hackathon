@@ -23,8 +23,10 @@ from firewatch.db.models import (
     SourceAsset,
 )
 from firewatch.evidence.canonical import canonical_bytes, evidence_hash
+from firewatch.evidence.files import ReadBudget
 from firewatch.evidence.payload import EvidenceRegion, build_evidence, evidence_content
 from firewatch.evidence.serialization import CANONICALIZATION_VERSION
+from firewatch.evidence.storage import SupabaseStore, preserve_source, source_bytes
 from firewatch.ml.baselines import BASELINE_VERSIONS
 from firewatch.ml.inference_bundle import ApprovedScorer
 from firewatch.ml.predict import _approved_runtime, score_features
@@ -33,7 +35,7 @@ from firewatch.pipeline.jobs import Lease, fence
 from firewatch.pipeline.replay_bundle import import_bundle, load_bundle
 from firewatch.processing.clusters import ClusteringSpec
 from firewatch.processing.features import FeatureSpec, load_feature_spec
-from firewatch.repositories.features import EnrichmentPins, build_run_features
+from firewatch.repositories.features import EnrichmentPins, build_run_features, collect_enrichment
 from firewatch.repositories.ingestion import persist_normalized
 from firewatch.repositories.revisions import RevisionPolicy
 from firewatch.repositories.runs import complete_and_publish_run
@@ -275,6 +277,7 @@ def execute_run(
             # A fresh fetch ID avoids concurrent stale-attempt filesystem collisions.
             raw = firms.fetch(source_request, batch_id=uuid4())
             normalized = normalize_firms_batch(raw)
+            preserve_source(normalized.asset.storage_path, normalized.asset.content_hash, settings)
             with Session(engine) as session, session.begin():
                 fence(session, lease, now())
                 run = _run(session, identifier)
@@ -390,16 +393,50 @@ def execute_run(
                 if weather is None:
                     raise WeatherError("Live weather client unavailable")
                 batch = weather.fetch(wr)
+                preserve_source(batch.asset.storage_path, batch.asset.content_hash, settings)
                 with Session(engine) as session, session.begin():
                     fence(session, lease, now())
                     save_weather(session, batch)
             except WeatherError:
                 weather_warning = True  # Missing inputs remain null and quality flagged.
 
+    prepared_pins = None
+    prepared_sources = None
+    availability = None
+    if settings.supabase_storage_enabled and request.mode == RunMode.LIVE:
+        # Choose/fetch immutable pins before taking a Run write lock. No provider or
+        # storage I/O occurs inside the feature transaction, including cross-host retries.
+        with Session(engine) as session:
+            saved = session.get(Run, identifier)
+            assert saved is not None
+            if "features" in saved.input_asset_manifest:
+                prepared_pins = EnrichmentPins.model_validate(
+                    saved.input_asset_manifest["features"]["pins"]
+                )
+            else:
+                availability = now()
+                prepared_pins = collect_enrichment(
+                    session, saved, snapshots, policy, config, availability
+                )
+            refs = prepared_pins.assets + prepared_pins.satellite_assets
+            if len(refs) > 256:
+                raise ValueError("Live source reference bound exceeded")
+            assets = {pin.asset_id: session.get(SourceAsset, pin.asset_id) for pin in refs}
+        prepared_sources = {}
+        budget = ReadBudget()
+        with SupabaseStore(settings) as store:
+            for pin in refs:
+                asset = assets[pin.asset_id]
+                if asset is None or asset.content_hash != pin.sha256:
+                    raise ValueError("Live source identity changed")
+                content = source_bytes(asset.storage_path, pin.sha256, settings, budget)
+                store.put(pin.sha256, content)
+                prepared_sources[pin.asset_id] = content
+
     with Session(engine) as session, session.begin():
         fence(session, lease, now())
         run = _run(session, identifier)
-        availability = (
+        availability = availability or (
             bundle.pins.retrieval_cutoff
             if bundle is not None
             else None
@@ -411,7 +448,8 @@ def execute_run(
             identifier,
             config,
             retrieval_cutoff=availability,
-            enrichment_pins=bundle.pins if bundle is not None else None,
+            enrichment_pins=bundle.pins if bundle is not None else prepared_pins,
+            source_contents=prepared_sources,
         )
         run = _run(session, identifier)
         quality = set(snapshots.quality_flags) | {

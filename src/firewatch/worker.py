@@ -7,6 +7,7 @@ import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from uuid import UUID
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session
 from firewatch.config import Settings, get_settings
 from firewatch.db.models import Run
 from firewatch.db.session import Database
+from firewatch.evidence.storage import StorageError, StorageIntegrityError
 from firewatch.ml.registry import ModelRegistryError, ModelScoringError
 from firewatch.pipeline.jobs import Lease, LeaseLost, claim, fence, finish, heartbeat, schedule
 from firewatch.pipeline.runner import execute_run
@@ -56,9 +58,10 @@ def process_one(
     *,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
     executor: Callable[..., object] = execute_run,
+    job_id: UUID | None = None,
 ) -> bool:
     with Session(engine) as session, session.begin():
-        lease = claim(session, settings, now())
+        lease = claim(session, settings, now(), job_id=job_id)
     if lease is None:
         return False
     error, retryable, retry_after = None, True, 0.0
@@ -91,6 +94,10 @@ def process_one(
         error, retryable = "MODEL_SCORING_WITHHELD", False
     except ModelRegistryError:
         error, retryable = "MODEL_APPROVAL_UNAVAILABLE", False
+    except StorageIntegrityError:
+        error, retryable = "EVIDENCE_STORAGE_MISMATCH", False
+    except StorageError:
+        error, retryable = "EVIDENCE_STORAGE_UNAVAILABLE", True
     except (ValueError, OSError):
         error, retryable = "INVALID_INPUT_OR_CONFIGURATION", False
     except Exception:

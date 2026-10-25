@@ -172,3 +172,56 @@ def test_scheduler_does_not_admit_historical_only_model_to_live_queue(empty_engi
     with Session(empty_engine) as session, session.begin():
         assert schedule(session, config, CLOCK) == 0
         assert session.scalar(select(func.count()).select_from(Job)) == 0
+
+
+def test_explicit_live_scorer_keeps_default_model_and_admits_frozen_live_job(api):
+    from pydantic import SecretStr
+    from test_operator_api import post, prepare, refresh_body
+
+    from firewatch.ml.registry import selected_version
+
+    client, engine, config = api
+    area_id, _ = prepare(engine)
+    config.active_scorer = "historical-model-not-installed"
+    config.live_scorer = "baseline-v1"
+    config.firms_map_key = SecretStr("synthetic-firms-test-key-1234567890")
+    response = post(client, "jobs/refresh", refresh_body(area_id))
+    assert response.status_code == 202, response.text
+    with Session(engine) as session:
+        assert selected_version(session, config) == config.active_scorer
+        job = session.scalar(select(Job))
+        assert job.payload["scorer_version"] == "baseline-v1"
+    status = client.get("/api/v1/status").json()
+    assert status["scorer"]["scorer_version"] == config.active_scorer
+    live = status["live_readiness"]
+    assert live["scorer"]["scorer_version"] == "baseline-v1"
+    assert live["scorer"]["score_kind"] == "baseline"
+    assert live["configuration_ready"]
+    assert not live["recent_live_data_available"]
+    assert "WORKER_NOT_OBSERVED" in live["blockers"]
+    config.live_scorer = None
+    rejected = post(client, "jobs/refresh", refresh_body(area_id), key="no-live-override")
+    assert rejected.status_code == 503
+    assert rejected.json()["error"]["code"] == "MODEL_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("live_scorer,expected", [(None, 0), ("registry", 0), ("baseline-v1", 1)])
+def test_scheduler_missing_registry_does_not_stop_existing_work(
+    empty_engine, tmp_path, live_scorer, expected
+):
+    migrate(empty_engine)
+    config = settings(
+        tmp_path, active_scorer="registry", live_scorer=live_scorer, max_refresh_window_hours=3
+    )
+    with Session(empty_engine) as session, session.begin():
+        region(session).enabled = True
+    with Session(empty_engine) as session, session.begin():
+        assert schedule(session, config, CLOCK) == expected
+        if expected:
+            from datetime import datetime
+
+            payload = session.scalar(select(Job)).payload
+            assert payload["scorer_version"] == "baseline-v1"
+            assert datetime.fromisoformat(payload["window_end"]) - datetime.fromisoformat(
+                payload["window_start"]
+            ) == timedelta(hours=3)

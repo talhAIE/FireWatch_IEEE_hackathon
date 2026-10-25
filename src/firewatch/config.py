@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     """Environment overrides .env; provider/chain secrets are conditional capabilities."""
 
     model_config = SettingsConfigDict(
-        env_file=(".env", ".env.firms"),
+        env_file=(".env", ".env.firms", ".env.supabase"),
         env_file_encoding="utf-8",
         extra="forbid",
         hide_input_in_errors=True,
@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     postgres_user: str = "firewatch"
     postgres_password: SecretStr | None = None
     firms_map_key: SecretStr | None = None
+    supabase_storage_enabled: bool = False
+    supabase_url: str | None = None
+    supabase_secret_key: SecretStr | None = None
+    supabase_bucket: str = Field(default="firewatch-evidence", pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
     public_reads_enabled: bool = True
     cors_origins: list[str] = Field(default_factory=list)
     regions_config: Path = Path("configs/regions.yaml")
@@ -52,6 +56,11 @@ class Settings(BaseSettings):
     max_replay_window_days: int = Field(default=31, ge=1, le=366)
     max_region_area_degrees2: float = Field(default=100, gt=0, le=1000)
     active_scorer: str = "baseline-v1"
+    live_scorer: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Explicit live-only scorer; unset inherits ACTIVE_SCORER without fallback.",
+    )
     refresh_interval_minutes: int = Field(default=15, ge=1, le=1440)
     worker_max_attempts: int = Field(default=5, ge=1, le=20)
     worker_lease_seconds: int = Field(default=120, ge=15, le=3600)
@@ -117,7 +126,7 @@ class Settings(BaseSettings):
             )
         return value
 
-    @field_validator("firms_map_key", "chain_private_key", mode="before")
+    @field_validator("firms_map_key", "chain_private_key", "supabase_secret_key", mode="before")
     @classmethod
     def empty_optional_secret(cls, value: object) -> object:
         if isinstance(value, str) and _is_placeholder(value):
@@ -144,6 +153,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_chain_configuration(self) -> "Settings":
+        if self.supabase_storage_enabled and (
+            not self.supabase_url
+            or not re.fullmatch(r"https://[a-z0-9-]+\.supabase\.co", self.supabase_url)
+            or not self.supabase_secret_key
+        ):
+            raise ValueError(
+                "Enabled storage requires an HTTPS Supabase project URL and secret key"
+            )
         if self.app_env == "production" and "public_reads_enabled" not in self.model_fields_set:
             self.public_reads_enabled = False
         if self.chain_enabled:

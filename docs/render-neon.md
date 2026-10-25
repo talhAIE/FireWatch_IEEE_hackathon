@@ -92,6 +92,9 @@ Then run `scripts/verify_render.py --base-url` against the service. A 200 from
 
 ## Free plan limits
 
+For a best-effort hourly worker on GitHub Actions and private shared source
+storage, follow [free scheduled live deployment](free-live-deployment.md).
+
 For public-read/CORS settings, live configuration blockers, wall-clock freshness,
 actual model inputs, and optional live/testnet operation, see
 [remaining audit issue repairs](remaining-api-issues.md).

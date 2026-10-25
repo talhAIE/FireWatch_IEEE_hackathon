@@ -300,8 +300,10 @@ def test_anchor_only_queue_is_left_for_anchor_executor(work):
 
 
 @pytest.mark.parametrize("degraded", [False, True])
+@pytest.mark.parametrize("separate_live_scorer", [False, True])
+@pytest.mark.parametrize("remote_storage", [False, True])
 def test_live_pipeline_reuses_source_chunks_and_publishes_only_after_evidence(
-    empty_engine, tmp_path, degraded
+    empty_engine, tmp_path, degraded, separate_live_scorer, remote_storage, monkeypatch
 ):
     from refresh_factory import FakeRefreshClient
 
@@ -315,7 +317,30 @@ def test_live_pipeline_reuses_source_chunks_and_publishes_only_after_evidence(
         area.enabled = True
         identifier = queued(session, area.id, mode="live")
         area_id = area.id
-    config = settings(tmp_path)
+    config = settings(
+        tmp_path,
+        active_scorer="registry" if separate_live_scorer else "baseline-v1",
+        live_scorer="baseline-v1" if separate_live_scorer else None,
+    )
+    objects = {}
+    if remote_storage:
+        from pydantic import SecretStr
+
+        from firewatch.evidence.storage import SupabaseStore
+
+        config.supabase_storage_enabled = True
+        config.supabase_url = "https://synthetic-project.supabase.co"
+        config.supabase_secret_key = SecretStr("synthetic-storage-unit-key")
+
+        def put(self, checksum, content):
+            with Session(empty_engine) as session:
+                assert session.scalar(select(func.count()).select_from(LiveRunHead)) == 0
+            objects[checksum] = content
+
+        monkeypatch.setattr(SupabaseStore, "put", put)
+        monkeypatch.setattr(
+            SupabaseStore, "get", lambda self, checksum, **kw: objects.get(checksum)
+        )
     client = FakeRefreshClient(tmp_path / "live", clock=lambda: CLOCK)
     client.frp = "150"
     client.failures[(Product.NOAA21_NRT, (T - timedelta(hours=48)).date())] = [
@@ -353,9 +378,38 @@ def test_live_pipeline_reuses_source_chunks_and_publishes_only_after_evidence(
             )
             return adapter.fetch(request)
 
-    def check_unpublished(_):
+    crashed = False
+
+    def check_unpublished(stage):
+        nonlocal crashed
         with Session(empty_engine) as session:
             assert session.scalar(select(func.count()).select_from(LiveRunHead)) == 0
+        if remote_storage and stage == Stage.EVIDENCE and not crashed:
+            crashed = True
+            raise RuntimeError("Synthetic runner shutdown before publication")
+
+    if remote_storage:
+        with pytest.raises(RuntimeError, match="runner shutdown"):
+            execute_run(
+                empty_engine,
+                config,
+                lease,
+                lambda: later,
+                firms=client,
+                weather=Weather(),
+                after_stage=check_unpublished,
+            )
+        # A new runner has no prior raw filesystem. Retry must restore the exact
+        # frozen source pins, without changing database paths or fetching providers again.
+        from pathlib import Path
+
+        from firewatch.db.models import SourceAsset
+
+        with Session(empty_engine) as session:
+            for asset in session.scalars(select(SourceAsset)):
+                Path(asset.storage_path).unlink(missing_ok=True)
+        later += timedelta(seconds=121)
+        lease = take(empty_engine, config, later)
 
     run_id = execute_run(
         empty_engine,
@@ -375,6 +429,13 @@ def test_live_pipeline_reuses_source_chunks_and_publishes_only_after_evidence(
             "weather_source_unavailable" in run.input_asset_manifest["coverage_warnings"]
         ) == degraded
         assert session.scalar(select(func.count()).select_from(Alert)) == 1
+        if remote_storage:
+            from firewatch.evidence.verify import audit_artifacts
+
+            alert = session.scalar(select(Alert))
+            audit = audit_artifacts(session, alert.canonical_payload, alert.original_hash, config)
+            assert audit.status == "verified"
+            assert audit.scope == "referenced_sources_and_local_model"
 
 
 def test_critical_outbox_is_atomic_and_idempotent(work):

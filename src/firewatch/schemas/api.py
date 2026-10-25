@@ -260,6 +260,9 @@ class WorkerObservation(DTO):
 
 
 class LiveReadiness(DTO):
+    scorer: ModelMetadata | None = Field(
+        default=None, description="Live scorer capabilities, independent of historical selection."
+    )
     configuration_ready: bool = Field(
         default=False,
         description="Configuration check only; does not prove worker liveness.",
@@ -375,7 +378,9 @@ class ArtifactAudit(DTO):
         "reference_limit",
     ]
     items: list[ArtifactCheck] = Field(default_factory=list)
-    scope: Literal["referenced_local_files"] = "referenced_local_files"
+    scope: Literal["referenced_local_files", "referenced_sources_and_local_model"] = (
+        "referenced_local_files"
+    )
 
 
 class Verification(RunContext):
@@ -398,7 +403,8 @@ class Verification(RunContext):
         "both can rewrite both. A matching independently anchored digest supplies a separate "
         "comparison point. Local-chain anchoring is a demonstration, not independent public "
         "notarization. Integrity does not prove a fire is real or a model is correct. "
-        "Artifact checks cover referenced local file bytes, not scientific validity or approval."
+        "Artifact checks cover referenced source and model bytes, "
+        "not scientific validity or approval."
     )
 
 

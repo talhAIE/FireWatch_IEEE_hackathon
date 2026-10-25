@@ -123,7 +123,7 @@ def refresh_payload(
             422, "INVALID_REFRESH_WINDOW", "The refresh window exceeds configured bounds."
         )
     try:
-        version = selected_version(session, settings)
+        version = selected_version(session, settings, mode=RunMode.LIVE)
         if version not in BASELINE_VERSIONS:
             resolve_approved(session, settings, version, region=area, mode=RunMode.LIVE)
     except ModelRegistryError:

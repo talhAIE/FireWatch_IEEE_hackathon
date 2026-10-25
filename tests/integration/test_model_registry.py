@@ -65,6 +65,19 @@ def registry(empty_engine, tmp_path, fitted_registry):
     return empty_engine, config, first, promoted
 
 
+def test_live_override_preserves_registry_selection_and_scope(registry):
+    engine, config, first, _ = registry
+    config.live_scorer = "baseline-v1"
+    with Session(engine) as session:
+        assert selected_version(session, config) == first.version
+        assert selected_version(session, config, mode=RunMode.REPLAY) == first.version
+        assert selected_version(session, config, mode=RunMode.LIVE) == "baseline-v1"
+        config.live_scorer = "registry"
+        assert selected_version(session, config, mode=RunMode.LIVE) == first.version
+        with pytest.raises(ModelRegistryError, match="run mode"):
+            resolve_approved(session, config, first.version, mode=RunMode.LIVE)
+
+
 def test_promotion_idempotence_retains_previous_and_atomic_rollback(registry, fitted_registry):
     engine, config, first, _ = registry
     second = make_candidate(config.model_dir, fitted_registry, "synthetic-forest-v2")
