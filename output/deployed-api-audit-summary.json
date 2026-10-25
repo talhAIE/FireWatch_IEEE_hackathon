@@ -1,0 +1,277 @@
+{
+  "when": "25 October 2026, 13:15 PKT",
+  "base": "https://firewatch-ieee-hackathon.onrender.com",
+  "summary": {
+    "requests": 82,
+    "documented_operations": 18,
+    "documented_gets": 15,
+    "documented_posts": 3,
+    "unexpected_statuses": 1,
+    "contract_failures": 0,
+    "checks_passed": 25,
+    "checks_failed": 4,
+    "latency_ms": {
+      "minimum": 290.16,
+      "median": 574.03,
+      "maximum": 2540.51
+    }
+  },
+  "findings": [
+    {
+      "severity": "High",
+      "title": "Scorer unavailable: application readiness fails",
+      "detail": "GET /health/ready returns 503 ARTIFACT_UNAVAILABLE. GET /api/v1/models/current returns artifact_ready=false and scoring_available=false for forest-independent-2025-v2. Saved scores are still readable; they do not demonstrate that new inference works. Confirm the deployed assets, MODEL_DIR, checksum/dependency contract, and build configuration."
+    },
+    {
+      "severity": "High",
+      "title": "Raw source evidence cannot be verified on the deployed instance",
+      "detail": "All four saved alert payload hashes match, but verify_artifacts=true reports unavailable with missing_file for the referenced source files. These are missing bytes at the configured deployed locations, not proof of tampering. Package the public assets, verify SOURCE_ARTIFACT_DIR, and rerun the audit."
+    },
+    {
+      "severity": "Medium",
+      "title": "Replay listing does not discover the saved replay runs",
+      "detail": "GET /api/v1/replays returns total=0 while GET /api/v1/runs?mode=replay returns four runs. The route filters on eligible replay_scenario metadata. Inspect the discovery metadata/query; use /runs?mode=replay for current run selection. Do not rewrite immutable evidence just to populate a dropdown."
+    },
+    {
+      "severity": "Configuration",
+      "title": "Business reads require a bearer token",
+      "detail": "All 13 business GET routes reject anonymous access with 401. This matches the production default and protects the API. If the research dashboard should be public, explicitly set PUBLIC_READS_ENABLED=true for reads and keep operator mutations authenticated. Never put the admin token in a public frontend."
+    },
+    {
+      "severity": "Configuration",
+      "title": "Tested browser origin is not allowed",
+      "detail": "An OPTIONS preflight for http://localhost:5173 with Authorization was rejected with 400. Same-origin Swagger works; configure CORS_ORIGINS with the actual approved frontend origin before browser integration. Other origins were not tested."
+    }
+  ],
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/health/ready",
+      "input": "None",
+      "output": "Database/schema/scorer readiness",
+      "result": "503 ARTIFACT_UNAVAILABLE",
+      "kind": "fail",
+      "operation": "health_ready"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/regions",
+      "input": "limit, offset",
+      "output": "Region IDs, names, bounds, enabled modes, latest live run",
+      "result": "200; 2 disabled regions",
+      "kind": "pass",
+      "operation": "list_regions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/runs",
+      "input": "region_id, mode, status, limit, offset",
+      "output": "Saved runs, stages, scorer version, freshness",
+      "result": "200; 4 replay runs; 0 live",
+      "kind": "pass",
+      "operation": "list_runs"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/runs/{run_id}",
+      "input": "run_id UUID path",
+      "output": "One saved run and stage/freshness metadata",
+      "result": "200 for existing runs; 404 unknown",
+      "kind": "pass",
+      "operation": "get_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/hotspots",
+      "input": "Required run_id; optional priority, bbox, limit, offset",
+      "output": "Ranked locations, FRP, detection counts, priority, score, explanations, alert ID",
+      "result": "200; ML run has 6 hotspots",
+      "kind": "pass",
+      "operation": "list_hotspots"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/hotspots.geojson",
+      "input": "Required run_id; optional priority, bbox, limit, offset",
+      "output": "GeoJSON FeatureCollection; coordinates=[longitude,latitude]",
+      "result": "200; identities and counts match list",
+      "kind": "pass",
+      "operation": "get_hotspots_geojson"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/hotspots/{snapshot_id}",
+      "input": "snapshot_id UUID path; optional run_id",
+      "output": "Hotspot, features, units, missing flags, explanation, optional saved evidence",
+      "result": "200 for populated runs; 404 unknown",
+      "kind": "pass",
+      "operation": "get_hotspot"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/summary",
+      "input": "Required run_id; optional priority, bbox",
+      "output": "Counts by priority and score kind, filters and freshness",
+      "result": "200; totals match list and map",
+      "kind": "pass",
+      "operation": "get_summary"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/models/current",
+      "input": "None",
+      "output": "Selected model identity, readiness, score semantics, limitations",
+      "result": "200 HTTP, but model/scoring unavailable",
+      "kind": "fail",
+      "operation": "get_current_model"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/replays",
+      "input": "limit, offset",
+      "output": "Replay scenarios discovered from eligible saved-run metadata",
+      "result": "200; empty despite 4 replay runs",
+      "kind": "warn",
+      "operation": "list_replays"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/alerts/{alert_id}",
+      "input": "alert_id UUID path; optional run_id, verify_artifacts",
+      "output": "Redacted saved evidence payload, hashes and verification status",
+      "result": "200; 4 existing alerts readable",
+      "kind": "pass",
+      "operation": "get_alert"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/alerts/{alert_id}/verify",
+      "input": "alert_id UUID path; optional run_id, verify_artifacts=true",
+      "output": "Saved payload digest, optional source/model byte audit, anchor status",
+      "result": "200; hashes match, source files missing for all 4",
+      "kind": "fail",
+      "operation": "verify_alert"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/status",
+      "input": "None",
+      "output": "Source freshness, live refreshes, scorer, FIRMS/chain flags",
+      "result": "200; no live ingestion; model unavailable",
+      "kind": "warn",
+      "operation": "get_status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/jobs/{job_id}",
+      "input": "job_id UUID path; operator bearer required",
+      "output": "Durable job state, timing, progress, result run or safe error",
+      "result": "Unknown ID correctly 404; existing job not sampled",
+      "kind": "limited",
+      "operation": "get_job"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/jobs/refresh",
+      "input": "Bearer + Idempotency-Key; JSON region_id, window_start, window_end",
+      "output": "202 job_id/status; queues refresh, does not finish it synchronously",
+      "result": "401 without token; 422 invalid body; execution not tested",
+      "kind": "limited",
+      "operation": "queue_refresh"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/jobs/replay",
+      "input": "Bearer + Idempotency-Key; JSON scenario_id",
+      "output": "202 job_id/status; queues configured replay",
+      "result": "401 without token; 422 invalid body; execution not tested",
+      "kind": "limited",
+      "operation": "queue_replay"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/alerts/{alert_id}/anchor",
+      "input": "Bearer + Idempotency-Key; alert_id UUID; empty JSON object",
+      "output": "202 job acceptance for configured chain anchoring",
+      "result": "401 without token; 422 malformed ID; chain disabled",
+      "kind": "limited",
+      "operation": "queue_anchor"
+    },
+    {
+      "method": "GET",
+      "path": "/health/live",
+      "input": "None",
+      "output": "Process liveness: status=ok",
+      "result": "200; process alive",
+      "kind": "pass",
+      "operation": "health_live"
+    }
+  ],
+  "sample": {
+    "latitude": 39.79337504616922,
+    "longitude": -121.80270004696976,
+    "member_count": 2,
+    "latest_detection_at": "2024-07-25T20:02:00Z",
+    "frp_max_mw": 6.77,
+    "frp_sum_mw": 13.54,
+    "priority": "HIGH",
+    "priority_score": 0.2433265211568792,
+    "score_kind": "model_score",
+    "escalation_probability": null,
+    "scorer_version": "forest-independent-2025-v2"
+  },
+  "runs": [
+    {
+      "run_id": "63c1b8df-4f31-544d-9691-16f8ef39f9bf",
+      "scorer": "baseline-v1",
+      "as_of": "2024-07-26T00:00:00Z",
+      "total": 6,
+      "completeness": "partial",
+      "priorities": {
+        "LOW": 1,
+        "MEDIUM": 3,
+        "HIGH": 0,
+        "CRITICAL": 2
+      }
+    },
+    {
+      "run_id": "b3f9c88e-d4e2-501b-85b1-8fea26048fb4",
+      "scorer": "forest-independent-2025-v2",
+      "as_of": "2024-07-26T00:00:00Z",
+      "total": 6,
+      "completeness": "partial",
+      "priorities": {
+        "LOW": 3,
+        "MEDIUM": 2,
+        "HIGH": 1,
+        "CRITICAL": 0
+      }
+    },
+    {
+      "run_id": "db292694-80fa-54c5-8daf-aa209f0a820d",
+      "scorer": "baseline-v1",
+      "as_of": "2024-07-25T22:00:00Z",
+      "total": 6,
+      "completeness": "partial",
+      "priorities": {
+        "LOW": 1,
+        "MEDIUM": 3,
+        "HIGH": 0,
+        "CRITICAL": 2
+      }
+    },
+    {
+      "run_id": "2372cf3c-770a-5e25-b2eb-04c5d9a0b64a",
+      "scorer": "baseline-v1",
+      "as_of": "2024-05-06T12:00:00Z",
+      "total": 0,
+      "completeness": "complete",
+      "priorities": {
+        "LOW": 0,
+        "MEDIUM": 0,
+        "HIGH": 0,
+        "CRITICAL": 0
+      }
+    }
+  ]
+}
