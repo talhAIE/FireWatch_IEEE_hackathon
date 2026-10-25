@@ -144,9 +144,23 @@ def _source(session: Session, pin: AssetPin, settings: Settings, budget: ReadBud
     if settings.source_artifact_dir is not None:
         # Portable deployments locate immutable public source bytes by their pin,
         # without rewriting the original workstation locator in the database.
-        content = budget.read(
-            settings.source_artifact_dir / f"{pin.sha256}.bin", [settings.source_artifact_dir]
-        )
+        mirror = settings.source_artifact_dir / f"{pin.sha256}.bin"
+        original = Path(asset.storage_path)
+        roots = [settings.raw_data_dir, settings.replay_bundle_dir]
+        # Newly ingested live sources need not exist in the frozen historical
+        # mirror. Fall back only for an absent mirror and a permitted local path.
+        try:
+            use_original = (
+                not mirror.exists()
+                and not mirror.is_symlink()
+                and any(original.resolve().is_relative_to(root.resolve()) for root in roots)
+            )
+        except (OSError, ValueError, RuntimeError):
+            raise AuditFailure("unsafe_path") from None
+        if use_original:
+            content = budget.read(original, roots)
+        else:
+            content = budget.read(mirror, [settings.source_artifact_dir])
     else:
         content = budget.read(
             Path(asset.storage_path), [settings.raw_data_dir, settings.replay_bundle_dir]

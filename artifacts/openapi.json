@@ -29,6 +29,11 @@
           "freshness": {
             "$ref": "#/components/schemas/Freshness"
           },
+          "is_historical": {
+            "default": false,
+            "title": "Is Historical",
+            "type": "boolean"
+          },
           "mode": {
             "$ref": "#/components/schemas/RunMode"
           },
@@ -317,6 +322,50 @@
         "title": "BoundingBox",
         "type": "object"
       },
+      "ChainReadiness": {
+        "additionalProperties": false,
+        "properties": {
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "confirmed_anchor_records": {
+            "default": 0,
+            "title": "Confirmed Anchor Records",
+            "type": "integer"
+          },
+          "independent_notarization_verified": {
+            "default": false,
+            "title": "Independent Notarization Verified",
+            "type": "boolean"
+          },
+          "network_kind": {
+            "default": "local",
+            "title": "Network Kind",
+            "type": "string"
+          },
+          "notice": {
+            "default": "Configuration and saved anchor records alone do not verify an independent chain digest.",
+            "title": "Notice",
+            "type": "string"
+          },
+          "state": {
+            "default": "disabled",
+            "enum": [
+              "disabled",
+              "read_only",
+              "signing_configured"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "title": "ChainReadiness",
+        "type": "object"
+      },
       "Completeness": {
         "enum": [
           "complete",
@@ -388,6 +437,11 @@
           },
           "freshness": {
             "$ref": "#/components/schemas/Freshness"
+          },
+          "is_historical": {
+            "default": false,
+            "title": "Is Historical",
+            "type": "boolean"
           },
           "limit": {
             "title": "Limit",
@@ -530,6 +584,17 @@
             ],
             "title": "Observation Age Hours"
           },
+          "observations_currently_stale": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observations Currently Stale"
+          },
           "observations_stale": {
             "anyOf": [
               {
@@ -561,6 +626,30 @@
             "title": "Reference Time",
             "type": "string"
           },
+          "wall_clock_observation_age_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Age against evaluated_at, even for historical replay outputs.",
+            "title": "Wall Clock Observation Age Hours"
+          },
+          "wall_clock_weather_age_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Weather age against evaluated_at, not the replay cutoff.",
+            "title": "Wall Clock Weather Age Hours"
+          },
           "weather_age_hours": {
             "anyOf": [
               {
@@ -571,6 +660,17 @@
               }
             ],
             "title": "Weather Age Hours"
+          },
+          "weather_currently_stale": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weather Currently Stale"
           },
           "weather_stale": {
             "anyOf": [
@@ -715,6 +815,11 @@
           "hotspot": {
             "$ref": "#/components/schemas/HotspotView"
           },
+          "is_historical": {
+            "default": false,
+            "title": "Is Historical",
+            "type": "boolean"
+          },
           "missing_flags": {
             "additionalProperties": {
               "type": "boolean"
@@ -818,6 +923,11 @@
           },
           "freshness": {
             "$ref": "#/components/schemas/Freshness"
+          },
+          "is_historical": {
+            "default": false,
+            "title": "Is Historical",
+            "type": "boolean"
           },
           "items": {
             "items": {
@@ -1195,6 +1305,40 @@
         "type": "object"
       },
       "JsonValue": {},
+      "LiveReadiness": {
+        "additionalProperties": false,
+        "properties": {
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "configuration_ready": {
+            "default": false,
+            "description": "Configuration check only; does not prove worker liveness.",
+            "title": "Configuration Ready",
+            "type": "boolean"
+          },
+          "eligible_region_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Eligible Region Ids",
+            "type": "array"
+          },
+          "recent_live_data_available": {
+            "default": false,
+            "description": "Recent observations in the live head; not proof of continuous ingestion.",
+            "title": "Recent Live Data Available",
+            "type": "boolean"
+          }
+        },
+        "title": "LiveReadiness",
+        "type": "object"
+      },
       "LivenessResponse": {
         "properties": {
           "status": {
@@ -1209,6 +1353,34 @@
       "ModelMetadata": {
         "additionalProperties": false,
         "properties": {
+          "active_features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Active Features",
+            "type": "array"
+          },
+          "approved_bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BoundingBox"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approved_region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Region"
+          },
           "artifact_ready": {
             "title": "Artifact Ready",
             "type": "boolean"
@@ -1216,6 +1388,18 @@
           "artifact_required": {
             "title": "Artifact Required",
             "type": "boolean"
+          },
+          "calibration_status": {
+            "default": "unknown",
+            "title": "Calibration Status",
+            "type": "string"
+          },
+          "context_only_features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Context Only Features",
+            "type": "array"
           },
           "feature_version": {
             "anyOf": [
@@ -1247,6 +1431,16 @@
             ],
             "title": "Model Id"
           },
+          "priority_thresholds_provisional": {
+            "default": true,
+            "title": "Priority Thresholds Provisional",
+            "type": "boolean"
+          },
+          "probability_notice": {
+            "default": "A ranking score is not a fire probability or physical severity.",
+            "title": "Probability Notice",
+            "type": "string"
+          },
           "probability_supported": {
             "title": "Probability Supported",
             "type": "boolean"
@@ -1265,6 +1459,11 @@
           "score_kind": {
             "$ref": "#/components/schemas/ScoreKind"
           },
+          "score_units": {
+            "default": "version_specific_ranking_index",
+            "title": "Score Units",
+            "type": "string"
+          },
           "scorer_version": {
             "title": "Scorer Version",
             "type": "string"
@@ -1281,6 +1480,13 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "supported_modes": {
+            "items": {
+              "$ref": "#/components/schemas/RunMode"
+            },
+            "title": "Supported Modes",
+            "type": "array"
           }
         },
         "required": [
@@ -1635,6 +1841,11 @@
           "freshness": {
             "$ref": "#/components/schemas/Freshness"
           },
+          "is_historical": {
+            "default": false,
+            "title": "Is Historical",
+            "type": "boolean"
+          },
           "mode": {
             "$ref": "#/components/schemas/RunMode"
           },
@@ -1657,8 +1868,23 @@
             "title": "Run Id",
             "type": "string"
           },
+          "scenario_configured": {
+            "default": false,
+            "title": "Scenario Configured",
+            "type": "boolean"
+          },
           "scenario_id": {
             "title": "Scenario Id",
+            "type": "string"
+          },
+          "scenario_id_source": {
+            "default": "manifest",
+            "enum": [
+              "manifest",
+              "orchestration",
+              "historical_run"
+            ],
+            "title": "Scenario Id Source",
             "type": "string"
           },
           "schema_version": {
@@ -1744,6 +1970,11 @@
           },
           "freshness": {
             "$ref": "#/components/schemas/Freshness"
+          },
+          "is_historical": {
+            "default": false,
+            "title": "Is Historical",
+            "type": "boolean"
           },
           "mode": {
             "$ref": "#/components/schemas/RunMode"
@@ -2044,9 +2275,30 @@
             "title": "Chain Enabled",
             "type": "boolean"
           },
+          "chain_readiness": {
+            "$ref": "#/components/schemas/ChainReadiness"
+          },
           "climate_baseline_count": {
             "title": "Climate Baseline Count",
             "type": "integer"
+          },
+          "cors_origins": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cors Origins",
+            "type": "array"
+          },
+          "data_mode": {
+            "default": "empty",
+            "enum": [
+              "empty",
+              "historical_only",
+              "live",
+              "mixed"
+            ],
+            "title": "Data Mode",
+            "type": "string"
           },
           "evaluated_at": {
             "format": "date-time",
@@ -2055,6 +2307,14 @@
           },
           "firms_configured": {
             "title": "Firms Configured",
+            "type": "boolean"
+          },
+          "live_readiness": {
+            "$ref": "#/components/schemas/LiveReadiness"
+          },
+          "public_reads_enabled": {
+            "default": false,
+            "title": "Public Reads Enabled",
             "type": "boolean"
           },
           "refreshes": {
@@ -2096,6 +2356,9 @@
               }
             ],
             "title": "Weather Latest Retrieved At"
+          },
+          "worker": {
+            "$ref": "#/components/schemas/WorkerObservation"
           }
         },
         "required": [
@@ -2127,6 +2390,11 @@
           },
           "freshness": {
             "$ref": "#/components/schemas/Freshness"
+          },
+          "is_historical": {
+            "default": false,
+            "title": "Is Historical",
+            "type": "boolean"
           },
           "mode": {
             "$ref": "#/components/schemas/RunMode"
@@ -2247,6 +2515,11 @@
             "title": "Integrity Notice",
             "type": "string"
           },
+          "is_historical": {
+            "default": false,
+            "title": "Is Historical",
+            "type": "boolean"
+          },
           "local_status": {
             "enum": [
               "local_match",
@@ -2293,6 +2566,50 @@
           "anchors"
         ],
         "title": "Verification",
+        "type": "object"
+      },
+      "WorkerObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "latest_heartbeat_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Heartbeat At"
+          },
+          "notice": {
+            "default": "Recent job activity does not prove an idle worker or scheduler is still running.",
+            "title": "Notice",
+            "type": "string"
+          },
+          "pending_jobs": {
+            "default": 0,
+            "title": "Pending Jobs",
+            "type": "integer"
+          },
+          "scheduler_verified": {
+            "default": false,
+            "title": "Scheduler Verified",
+            "type": "boolean"
+          },
+          "state": {
+            "default": "unverified",
+            "enum": [
+              "recent_activity",
+              "stalled",
+              "unverified"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "title": "WorkerObservation",
         "type": "object"
       }
     },

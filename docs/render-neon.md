@@ -92,6 +92,10 @@ Then run `scripts/verify_render.py --base-url` against the service. A 200 from
 
 ## Free plan limits
 
+For public-read/CORS settings, live configuration blockers, wall-clock freshness,
+actual model inputs, and optional live/testnet operation, see
+[remaining audit issue repairs](remaining-api-issues.md).
+
 Render Free services sleep after 15 minutes without requests and have 512 MB
 RAM; a cold request can take longer. No persistent disk is included. Included
 compute, bandwidth, and build limits still apply. Any account-specific card

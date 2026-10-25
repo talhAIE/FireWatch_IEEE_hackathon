@@ -125,7 +125,8 @@ def context(
 ) -> RunContext:
     observed, scored = run_times(session, run) if times is None else times
     reference = run.as_of if run.mode == RunMode.REPLAY else now
-    manifest = run.input_asset_manifest.get("freshness", {})
+    saved_manifest = run.input_asset_manifest if isinstance(run.input_asset_manifest, dict) else {}
+    manifest = saved_manifest.get("freshness", {})
     manifest = manifest if isinstance(manifest, dict) else {}
     weather = aware_timestamp(manifest.get("latest_weather_valid_at"))
     retrieved = aware_timestamp(manifest.get("latest_retrieved_at"))
@@ -144,6 +145,7 @@ def context(
         mode=run.mode,
         as_of=run.as_of,
         data_completeness=run.completeness,
+        is_historical=run.mode == RunMode.REPLAY,
         freshness=Freshness(
             evaluated_at=now,
             reference_time=reference,
@@ -160,6 +162,22 @@ def context(
             else None,
             weather_stale=weather_age > settings.weather_max_age_hours
             if weather_age is not None
+            else None,
+            wall_clock_observation_age_hours=max(0.0, (now - observed).total_seconds() / 3600)
+            if observed
+            else None,
+            wall_clock_weather_age_hours=max(0.0, (now - weather).total_seconds() / 3600)
+            if weather
+            else None,
+            observations_currently_stale=(now - observed).total_seconds()
+            > settings.detection_max_age_hours * 3600
+            or observed > now
+            if observed
+            else None,
+            weather_currently_stale=(now - weather).total_seconds()
+            > settings.weather_max_age_hours * 3600
+            or weather > now
+            if weather
             else None,
             quality_flags=flags,
         ),
@@ -243,6 +261,7 @@ class ArtifactInspector:
 
     def __init__(self) -> None:
         self._cache: dict[tuple[str, str, int, int], bool] = {}
+        self._details: dict[tuple[str, str], dict[str, Any]] = {}
         self._lock = Lock()
 
     def ready(self, model: ModelVersion, root: Path) -> bool:
@@ -275,9 +294,11 @@ class ArtifactInspector:
                 )
                 with self._lock:
                     if key not in self._cache:
-                        load_inference_bundle(path, model.artifact_hash, model.version)
+                        bundle = load_inference_bundle(path, model.artifact_hash, model.version)
                         if len(self._cache) >= 64:
                             self._cache.clear()
+                            self._details.clear()
+                        self._details[str(path), model.artifact_hash] = bundle.describe()
                         self._cache[key] = True
                     return self._cache[key]
             if not path.is_relative_to(base) or not path.is_file():
@@ -298,6 +319,13 @@ class ArtifactInspector:
                 return self._cache[key]
         except (OSError, ValueError):
             return False
+
+    def describe(self, model: ModelVersion, root: Path) -> dict[str, Any]:
+        if not self.ready(model, root):
+            return {}
+        path = managed_path(root, model.artifact_path)
+        with self._lock:
+            return dict(self._details.get((str(path), model.artifact_hash), {}))
 
 
 def model_metadata(
@@ -323,6 +351,8 @@ def model_metadata(
             scoring_available=True,
             probability_supported=False,
             limitations=limitations,
+            supported_modes=[RunMode.LIVE, RunMode.REPLAY],
+            calibration_status="not_applicable",
         )
     model = session.scalars(
         select(ModelVersion).where(ModelVersion.version == version)
@@ -339,6 +369,29 @@ def model_metadata(
         and isinstance(model.training_manifest, dict)
         and model.training_manifest.get("schema_version") == "model-registry-v1"
     )
+    scope = (
+        model.training_manifest.get("scope", {})
+        if valid and model and isinstance(model.training_manifest, dict)
+        else {}
+    )
+    scope = scope if isinstance(scope, dict) else {}
+    modes = scope.get("modes", [])
+    supported = (
+        [
+            RunMode(mode)
+            for mode in modes
+            if isinstance(mode, str) and mode in RunMode._value2member_map_
+        ]
+        if isinstance(modes, list)
+        else []
+    )
+    try:
+        from firewatch.schemas.contracts import BoundingBox
+
+        bbox = BoundingBox.model_validate(scope["bbox"]) if scope.get("bbox") else None
+    except ValueError:
+        bbox = None
+    details = artifacts.describe(model, settings.model_dir) if available and model else {}
     return ModelMetadata(
         scorer_version=version,
         score_kind=ScoreKind.PROBABILITY
@@ -352,6 +405,10 @@ def model_metadata(
         scoring_available=available,
         probability_supported=bool(valid and model and model.probability_supported),
         limitations=limitations,
+        supported_modes=supported,
+        approved_region=safe_text(scope.get("region")) or None,
+        approved_bbox=bbox,
+        **details,
     )
 
 

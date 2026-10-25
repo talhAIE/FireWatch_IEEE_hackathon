@@ -19,6 +19,10 @@ services:
         generateValue: true
       - key: APP_ENV
         value: production
+      - key: PUBLIC_READS_ENABLED
+        value: 'true'
+      - key: CORS_ORIGINS
+        value: '["http://localhost:3000","http://localhost:5173"]'
       - key: ACTIVE_SCORER
         value: registry
       - key: MODEL_DIR

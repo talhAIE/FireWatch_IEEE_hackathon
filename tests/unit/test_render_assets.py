@@ -60,3 +60,23 @@ def test_runtime_gate_refuses_a_source_only_package(package):
     root, _ = package
     with pytest.raises(ValueError, match="no inference bundle"):
         verify(root, runtime=True)
+
+
+def test_verified_model_describes_actual_inputs_and_calibration():
+    from firewatch.ml.inference_bundle import load_bundle
+
+    manifest = json.loads((DESTINATION / "manifest.json").read_text())
+    name = next(
+        n
+        for n in manifest["files_sha256"]
+        if n.startswith("model/") and n.endswith("/manifest.json")
+    )
+    path = DESTINATION / name
+    model = load_bundle(path.parent, manifest["files_sha256"][name])
+    info = model.describe()
+    assert info["calibration_status"] == "cv_uncalibrated"
+    assert info["priority_thresholds_provisional"]
+    assert len(info["active_features"]) == 9
+    assert "frp_sum_mw" in info["active_features"]
+    assert "temperature_c" not in info["active_features"]
+    assert "temperature_c" in info["context_only_features"]

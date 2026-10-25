@@ -121,6 +121,22 @@ class RuntimeForest:
         _validate(self._model, self._thresholds)
         self._shap = PathDependentSHAP(self._model)
 
+    def describe(self) -> dict[str, Any]:
+        """Describe the verified artifact without claiming unused inputs affect scores."""
+        used = {
+            self._model.feature_names[node.feature]
+            for tree in self._model.trees
+            for node in tree.nodes
+            if node.left != -1
+        }
+        return {
+            "calibration_status": self._model.calibration_status,
+            "score_units": self._thresholds.score_units,
+            "priority_thresholds_provisional": self._thresholds.provisional,
+            "active_features": sorted(used),
+            "context_only_features": sorted(set(self._model.feature_names) - used),
+        }
+
     def score(self, feature: FeatureSet) -> tuple[float, float | None, str, dict[str, Any]]:
         from firewatch.ml.explain import forest_explanation
 

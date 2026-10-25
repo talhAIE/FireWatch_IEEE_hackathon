@@ -120,6 +120,14 @@ class Freshness(DTO):
     weather_age_hours: float | None
     observations_stale: bool | None
     weather_stale: bool | None
+    wall_clock_observation_age_hours: float | None = Field(
+        default=None, description="Age against evaluated_at, even for historical replay outputs."
+    )
+    wall_clock_weather_age_hours: float | None = Field(
+        default=None, description="Weather age against evaluated_at, not the replay cutoff."
+    )
+    observations_currently_stale: bool | None = None
+    weather_currently_stale: bool | None = None
     quality_flags: list[str]
 
 
@@ -129,6 +137,7 @@ class RunContext(APIResponse):
     as_of: UTCDateTime
     data_completeness: Completeness
     freshness: Freshness
+    is_historical: bool = False
 
 
 class RegionView(DTO):
@@ -231,6 +240,47 @@ class ModelMetadata(APIResponse):
     scoring_available: bool
     probability_supported: bool
     limitations: list[str]
+    supported_modes: list[RunMode] = Field(default_factory=list)
+    approved_region: str | None = None
+    approved_bbox: BoundingBox | None = None
+    calibration_status: str = "unknown"
+    score_units: str = "version_specific_ranking_index"
+    priority_thresholds_provisional: bool = True
+    active_features: list[str] = Field(default_factory=list)
+    context_only_features: list[str] = Field(default_factory=list)
+    probability_notice: str = "A ranking score is not a fire probability or physical severity."
+
+
+class WorkerObservation(DTO):
+    state: Literal["recent_activity", "stalled", "unverified"] = "unverified"
+    pending_jobs: int = 0
+    latest_heartbeat_at: UTCDateTime | None = None
+    scheduler_verified: bool = False
+    notice: str = "Recent job activity does not prove an idle worker or scheduler is still running."
+
+
+class LiveReadiness(DTO):
+    configuration_ready: bool = Field(
+        default=False,
+        description="Configuration check only; does not prove worker liveness.",
+    )
+    recent_live_data_available: bool = Field(
+        default=False,
+        description="Recent observations in the live head; not proof of continuous ingestion.",
+    )
+    eligible_region_ids: list[UUID] = Field(default_factory=list)
+    blockers: list[str] = Field(default_factory=list)
+
+
+class ChainReadiness(DTO):
+    state: Literal["disabled", "read_only", "signing_configured"] = "disabled"
+    network_kind: str = "local"
+    confirmed_anchor_records: int = 0
+    independent_notarization_verified: bool = False
+    blockers: list[str] = Field(default_factory=list)
+    notice: str = (
+        "Configuration and saved anchor records alone do not verify an independent chain digest."
+    )
 
 
 class SourceStatus(DTO):
@@ -267,6 +317,12 @@ class StatusView(APIResponse):
     chain_enabled: bool
     weather_latest_retrieved_at: UTCDateTime | None
     climate_baseline_count: int
+    worker: WorkerObservation = Field(default_factory=WorkerObservation)
+    live_readiness: LiveReadiness = Field(default_factory=LiveReadiness)
+    chain_readiness: ChainReadiness = Field(default_factory=ChainReadiness)
+    public_reads_enabled: bool = False
+    cors_origins: list[str] = Field(default_factory=list)
+    data_mode: Literal["empty", "historical_only", "live", "mixed"] = "empty"
 
 
 class ReplayView(RunContext):
@@ -276,6 +332,8 @@ class ReplayView(RunContext):
     region_id: UUID
     scorer_version: str
     feature_version: str
+    scenario_id_source: Literal["manifest", "orchestration", "historical_run"] = "manifest"
+    scenario_configured: bool = False
 
 
 class AnchorView(DTO):

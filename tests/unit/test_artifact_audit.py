@@ -107,6 +107,19 @@ def test_portable_mirror_does_not_override_database_checksum(audit, tmp_path):
     assert any(item.reason == "metadata_mismatch" for item in run(audit).items)
 
 
+def test_new_live_source_can_be_verified_alongside_frozen_mirror(audit, tmp_path):
+    settings, _, records, _ = audit
+    settings.source_artifact_dir = tmp_path / "mirror"
+    settings.source_artifact_dir.mkdir()
+    # The database locators already point into RAW_DATA_DIR; no mirror copy yet.
+    assert run(audit).status == "verified"
+    first = next(iter(records.values()))
+    mirror = settings.source_artifact_dir / f"{first.content_hash}.bin"
+    mirror.write_bytes(b"tampered mirror")
+    # A present bad mirror must never be hidden by a good fallback file.
+    assert any(item.reason == "checksum_mismatch" for item in run(audit).items)
+
+
 @pytest.mark.parametrize(
     "change,expected,reason",
     [

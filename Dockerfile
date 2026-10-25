@@ -10,7 +10,8 @@ RUN python -m build --wheel --no-isolation
 FROM python:3.12-slim-bookworm@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70 AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 ENV RAW_DATA_DIR=/var/lib/firewatch/raw MODEL_DIR=/var/lib/firewatch/models \
-    REPLAY_BUNDLE_DIR=/var/lib/firewatch/replays MPLCONFIGDIR=/tmp/matplotlib
+    REPLAY_BUNDLE_DIR=/var/lib/firewatch/replays MPLCONFIGDIR=/tmp/matplotlib \
+    SOURCE_ARTIFACT_DIR=/app/deploy/render/assets
 WORKDIR /app
 COPY requirements.lock ./
 RUN python -m pip install --no-cache-dir --require-hashes -r requirements.lock \
