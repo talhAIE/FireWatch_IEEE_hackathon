@@ -76,8 +76,8 @@ def prepare() -> None:
     verify()
 
 
-def verify(root: Path = DESTINATION) -> None:
-    """Build-time verification uses only stdlib; no database or secrets required."""
+def verify(root: Path = DESTINATION, *, runtime: bool = False) -> None:
+    """Check pinned bytes and optionally the runtime; no database or secrets required."""
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     if manifest["schema_version"] != "render-artifacts-v1":
         raise ValueError("Unsupported deployment manifest")
@@ -109,12 +109,35 @@ def verify(root: Path = DESTINATION) -> None:
         raise ValueError("Deployment contains unpinned files")
     size = sum((root / name).stat().st_size for name in entries)
     print(f"Verified {len(entries)} deployment files ({size / 1048576:.2f} MiB).")
+    if runtime:
+        from firewatch.ml.inference_bundle import load_bundle
+
+        manifests = [
+            name
+            for name in entries
+            if name.startswith("model/") and name.endswith("/manifest.json")
+        ]
+        if not manifests:
+            raise ValueError("Deployment has no inference bundle")
+        for name in manifests:
+            path = root / name
+            metadata = json.loads(path.read_text(encoding="utf-8"))
+            load_bundle(path.parent, entries[name], metadata["scorer_version"])
+        print(
+            f"Verified {len(manifests)} inference bundle(s) against installed runtime dependencies."
+        )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("prepare", "verify"))
-    if parser.parse_args().command == "prepare":
+    parser.add_argument(
+        "--runtime",
+        action="store_true",
+        help="Also load and validate inference bundles after dependencies are installed",
+    )
+    args = parser.parse_args()
+    if args.command == "prepare":
         prepare()
     else:
-        verify()
+        verify(runtime=args.runtime)

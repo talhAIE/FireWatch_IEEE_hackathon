@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from scripts.render_assets import digest, verify
+from scripts.render_assets import DESTINATION, digest, verify
 
 
 @pytest.fixture
@@ -42,3 +42,21 @@ def test_package_rejects_paths_outside_reviewed_directories(package, name):
     )
     with pytest.raises(ValueError, match="Unsafe"):
         verify(root)
+
+
+def test_runtime_gate_loads_the_delivered_model_and_rejects_incompatible_dependencies(monkeypatch):
+    from firewatch.ml import inference_bundle
+
+    verify(DESTINATION, runtime=True)
+    actual = inference_bundle.runtime_dependencies()
+    monkeypatch.setattr(
+        inference_bundle, "runtime_dependencies", lambda: {**actual, "python": "0.0"}
+    )
+    with pytest.raises(ValueError, match="dependency mismatch"):
+        verify(DESTINATION, runtime=True)
+
+
+def test_runtime_gate_refuses_a_source_only_package(package):
+    root, _ = package
+    with pytest.raises(ValueError, match="no inference bundle"):
+        verify(root, runtime=True)

@@ -1,4 +1,4 @@
-# Shared API/worker/operator image. Training archives and secrets stay outside it.
+# Shared image; include only reviewed public deployment artifacts, never training archives/secrets.
 FROM python:3.12-slim-bookworm@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70 AS build
 WORKDIR /build
 COPY requirements-dev.lock ./
@@ -24,6 +24,12 @@ RUN python -m pip install --no-cache-dir --no-deps /tmp/wheels/*.whl \
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY configs ./configs
+COPY deploy/render ./deploy/render
+# Support both the container default and explicit MODEL_DIR=deploy/render/model.
+COPY deploy/render/model /var/lib/firewatch/models
+COPY scripts/render_assets.py ./scripts/render_assets.py
+# Fail the build on missing bytes or an incompatible inference runtime.
+RUN python scripts/render_assets.py verify --runtime
 USER 10001:10001
 EXPOSE 8000
 ENTRYPOINT ["python", "-m", "firewatch.runtime"]
