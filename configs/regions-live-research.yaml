@@ -1,0 +1,11 @@
+# Opt-in NASA FIRMS near-real-time research area; not incident/emergency coverage.
+schema_version: regions-v1
+regions:
+  - name: northern-california
+    description: Bounded near-real-time research region; use an explicit baseline until a live model is independently reviewed.
+    enabled: true
+    bbox:
+      west: -122.5
+      south: 38.5
+      east: -120.0
+      north: 40.5

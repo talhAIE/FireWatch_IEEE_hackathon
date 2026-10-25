@@ -10,9 +10,10 @@ from sqlalchemy.orm import Session
 
 from firewatch.config import Settings
 from firewatch.db.models import Job, Region, Run
-from firewatch.ml.registry import selected_version
+from firewatch.ml.baselines import BASELINE_VERSIONS
+from firewatch.ml.registry import ModelRegistryError, resolve_approved, selected_version
 from firewatch.repositories.jobs import ENQUEUE_LOCK
-from firewatch.schemas.common import JobStatus, JobType, RunStatus
+from firewatch.schemas.common import JobStatus, JobType, RunMode, RunStatus
 from firewatch.sources.firms_normalize import digest
 from firewatch.sources.open_meteo import utc
 
@@ -67,6 +68,13 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
         key = f"schedule:{area.id}:{slot.isoformat()}"
         if session.scalar(select(Job.id).where(Job.idempotency_key == key)) is not None:
             continue
+        version = selected_version(session, settings)
+        if version not in BASELINE_VERSIONS:
+            try:
+                resolve_approved(session, settings, version, region=area, mode=RunMode.LIVE)
+            except ModelRegistryError:
+                # Do not fill the queue with work outside a historical model's review.
+                continue
         payload = dict(
             schema_version="jobs-v1",
             region_id=str(area.id),
@@ -74,7 +82,7 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
             as_of=slot.isoformat(),
             window_start=(slot - timedelta(hours=48)).isoformat(),
             window_end=slot.isoformat(),
-            scorer_version=selected_version(session, settings),
+            scorer_version=version,
             feature_version=settings.feature_schema_version,
         )
         session.add(

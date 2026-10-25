@@ -20,7 +20,10 @@ class Settings(BaseSettings):
     """Environment overrides .env; provider/chain secrets are conditional capabilities."""
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="forbid", hide_input_in_errors=True
+        env_file=(".env", ".env.firms"),
+        env_file_encoding="utf-8",
+        extra="forbid",
+        hide_input_in_errors=True,
     )
 
     app_env: Literal["development", "test", "production"] = "development"

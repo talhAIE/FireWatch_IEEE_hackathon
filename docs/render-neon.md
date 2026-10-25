@@ -62,7 +62,39 @@ After deployment, open `/docs` and `/health/ready`, then run:
 The read-only checks verify model metadata, six historical hotspots, and all
 four alert evidence records against the deployed portable files.
 
+## Repairing ARTIFACT_UNAVAILABLE
+
+The root Docker image now includes `deploy/render` and copies the reviewed model
+to `/var/lib/firewatch/models` as well as `/app/deploy/render/model`. Earlier
+images omitted these public files, so a database with an approved model could
+start successfully yet return 503 from `/health/ready`. The build now runs
+`python scripts/render_assets.py verify --runtime`: it checks the file digests
+and actually loads the inference bundle using the locked runtime dependencies.
+The readiness route remains strict; it does not hide missing models or silently
+switch to the baseline.
+
+For an existing **Docker** Render service, pull the latest `devtalha` commit and
+select **Manual Deploy → Deploy latest commit** (clear the build cache if the
+old artifact-free image persists). Use absolute runtime values:
+
+```dotenv
+MODEL_DIR=/app/deploy/render/model
+SOURCE_ARTIFACT_DIR=/app/deploy/render/assets
+```
+
+For a **native Python** service, retain the repository root as working directory,
+the build/start settings in `render.yaml`, and the relative model/source paths
+already listed there. Do not use Docker-only `/app` paths on the native runtime.
+
+Once deployed, require `/health/ready` to return 200 with `artifact_ready=true`.
+Then run `scripts/verify_render.py --base-url` against the service. A 200 from
+`/models/current` is insufficient unless `scoring_available=true` as well.
+
 ## Free plan limits
+
+For public-read/CORS settings, live configuration blockers, wall-clock freshness,
+actual model inputs, and optional live/testnet operation, see
+[remaining audit issue repairs](remaining-api-issues.md).
 
 Render Free services sleep after 15 minutes without requests and have 512 MB
 RAM; a cold request can take longer. No persistent disk is included. Included

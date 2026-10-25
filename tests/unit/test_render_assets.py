@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from scripts.render_assets import digest, verify
+from scripts.render_assets import DESTINATION, digest, verify
 
 
 @pytest.fixture
@@ -42,3 +42,41 @@ def test_package_rejects_paths_outside_reviewed_directories(package, name):
     )
     with pytest.raises(ValueError, match="Unsafe"):
         verify(root)
+
+
+def test_runtime_gate_loads_the_delivered_model_and_rejects_incompatible_dependencies(monkeypatch):
+    from firewatch.ml import inference_bundle
+
+    verify(DESTINATION, runtime=True)
+    actual = inference_bundle.runtime_dependencies()
+    monkeypatch.setattr(
+        inference_bundle, "runtime_dependencies", lambda: {**actual, "python": "0.0"}
+    )
+    with pytest.raises(ValueError, match="dependency mismatch"):
+        verify(DESTINATION, runtime=True)
+
+
+def test_runtime_gate_refuses_a_source_only_package(package):
+    root, _ = package
+    with pytest.raises(ValueError, match="no inference bundle"):
+        verify(root, runtime=True)
+
+
+def test_verified_model_describes_actual_inputs_and_calibration():
+    from firewatch.ml.inference_bundle import load_bundle
+
+    manifest = json.loads((DESTINATION / "manifest.json").read_text())
+    name = next(
+        n
+        for n in manifest["files_sha256"]
+        if n.startswith("model/") and n.endswith("/manifest.json")
+    )
+    path = DESTINATION / name
+    model = load_bundle(path.parent, manifest["files_sha256"][name])
+    info = model.describe()
+    assert info["calibration_status"] == "cv_uncalibrated"
+    assert info["priority_thresholds_provisional"]
+    assert len(info["active_features"]) == 9
+    assert "frp_sum_mw" in info["active_features"]
+    assert "temperature_c" not in info["active_features"]
+    assert "temperature_c" in info["context_only_features"]

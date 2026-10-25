@@ -1,0 +1,50 @@
+{
+  "schema_version": "local-api-repairs-v1",
+  "verification": "The broad offline/local-PostgreSQL run passed 1308 tests and identified two stale OpenAPI snapshots. Both snapshots were reviewed/regenerated without changing existing operations, parameters, field types, or required fields. Final targeted runs passed 50 contract/unit tests and 10 operational tests, including the two previous failures and all newly added edge cases.",
+  "tests": {
+    "broad": {
+      "passed": 1308,
+      "failed": 2,
+      "skipped": 0
+    },
+    "contract_and_unit": {
+      "passed": 50,
+      "failed": 0,
+      "skipped": 0
+    },
+    "operations": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "firms_key_check": {
+    "credential_configured": true,
+    "provider_authenticated": true,
+    "http_status": 200
+  },
+  "local_api": {
+    "readiness": 200,
+    "discovered_replays": 4,
+    "active_features": 9,
+    "calibration_status": "cv_uncalibrated",
+    "historical": true,
+    "observations_currently_stale": true,
+    "live_blockers": [
+      "NO_ENABLED_REGIONS",
+      "SCORER_NOT_APPROVED_FOR_LIVE",
+      "WORKER_NOT_OBSERVED"
+    ],
+    "worker_state": "unverified",
+    "chain_state": "disabled",
+    "deployment_changed": false
+  },
+  "pushed": false,
+  "hosted_configuration_changed": false,
+  "unresolved_external_or_scientific_requirements": [
+    "Activate and supervise live ingestion explicitly",
+    "Independently validate and approve a live supervised model",
+    "Held-out calibration and weather/climate model evaluation",
+    "Configure a deployed testnet registry/RPC and private signer for external anchoring"
+  ]
+}

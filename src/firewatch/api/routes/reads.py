@@ -1,9 +1,11 @@
 """Phase 1.4 public read endpoints and authenticated job status."""
 
+import re
 from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
+import yaml
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select, text
 
@@ -14,6 +16,7 @@ from firewatch.api.dependencies import (
     require_operator,
 )
 from firewatch.api.errors import APIError
+from firewatch.api.operations import operational_status
 from firewatch.api.presentation import (
     context,
     evidence_projection,
@@ -87,6 +90,7 @@ from firewatch.schemas.common import (
 )
 from firewatch.schemas.contracts import BoundingBox
 from firewatch.schemas.firms_refresh import summarize_refresh
+from firewatch.schemas.operator import ReplayConfig
 
 ERRORS: dict[int | str, dict[str, Any]] = {
     code: {"model": ErrorEnvelope} for code in (401, 404, 422, 503)
@@ -296,25 +300,51 @@ def replays(
     selection = select(Run).where(
         Run.mode == RunMode.REPLAY,
         Run.status == RunStatus.COMPLETED,
-        Run.input_asset_manifest["replay_scenario"]["id"].astext.op("~")(
-            "^[a-z0-9]+(-[a-z0-9]+)*$"
-        ),
     )
     total = session.scalar(select(func.count()).select_from(selection.subquery())) or 0
     records = session.scalars(
         selection.order_by(Run.as_of.desc(), Run.id).limit(query.limit).offset(query.offset)
     ).all()
     times = page_run_times(session, records)
+    try:
+        with api_settings(request).replays_config.open("rb") as stream:
+            raw = stream.read(256 * 1024 + 1)
+        if len(raw) > 256 * 1024:
+            raise ValueError("Oversized replay configuration")
+        configured = {s.id for s in ReplayConfig.model_validate(yaml.safe_load(raw)).scenarios}
+    except (OSError, ValueError, RecursionError, yaml.YAMLError):
+        configured = set()
     items = []
     for run in records:
-        scenario = run.input_asset_manifest["replay_scenario"]
+        manifest = run.input_asset_manifest if isinstance(run.input_asset_manifest, dict) else {}
+        scenario = manifest.get("replay_scenario", {})
+        scenario = scenario if isinstance(scenario, dict) else {}
+        orchestration = manifest.get("orchestration", {})
+        orchestration = orchestration if isinstance(orchestration, dict) else {}
+        identifier, source = scenario.get("id"), "manifest"
+        if (
+            not isinstance(identifier, str)
+            or len(identifier) > 100
+            or not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", identifier)
+        ):
+            identifier, source = orchestration.get("scenario_id"), "orchestration"
+        if (
+            not isinstance(identifier, str)
+            or len(identifier) > 100
+            or not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", identifier)
+        ):
+            identifier, source = "historical-run-" + str(run.id), "historical_run"
         items.append(
             ReplayView(
                 **context(
                     session, run, now(request), api_settings(request), times=times[run.id]
                 ).model_dump(),
-                scenario_id=scenario["id"],
-                name=safe_text(scenario.get("name"), scenario["id"]),
+                scenario_id=identifier,
+                scenario_id_source=source,
+                scenario_configured=identifier in configured,
+                name=safe_text(
+                    scenario.get("name") or orchestration.get("scenario_name"), identifier
+                ),
                 description=safe_text(scenario.get("description")),
                 region_id=run.region_id,
                 scorer_version=run.scorer_version,
@@ -544,13 +574,20 @@ def status(request: Request, session: ReadSession) -> StatusView:
         )
     )
     baseline_count = session.scalar(select(func.count()).select_from(ClimateBaselineRecord)) or 0
+    metadata = model_info(request, session)
+    live_observation = session.scalar(
+        select(func.max(ClusterSnapshotRecord.latest_detection_at))
+        .join(LiveRunHead, LiveRunHead.run_id == ClusterSnapshotRecord.run_id)
+        .where(ClusterSnapshotRecord.latest_detection_at <= clock)
+    )
     return StatusView(
         evaluated_at=clock,
         sources=sources,
         refreshes=refreshes,
-        scorer=model_info(request, session),
+        scorer=metadata,
         firms_configured=settings.firms_map_key is not None,
         chain_enabled=settings.chain_enabled,
         weather_latest_retrieved_at=weather_time,
         climate_baseline_count=baseline_count,
+        **operational_status(session, settings, metadata, clock, live_observation),
     )
