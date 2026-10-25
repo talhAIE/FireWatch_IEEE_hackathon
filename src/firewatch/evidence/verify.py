@@ -3,8 +3,6 @@
 import hashlib
 import json
 import re
-import stat
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -14,12 +12,12 @@ from sqlalchemy.orm import Session
 
 from firewatch.config import Settings
 from firewatch.db.models import ModelVersion, SourceAsset
+from firewatch.evidence.files import MAX_FILE_BYTES, MAX_TOTAL_BYTES, AuditFailure, ReadBudget  # noqa: F401
 from firewatch.processing.features import AssetPin
 from firewatch.schemas.api import ArtifactAudit, ArtifactCheck
 
 MAX_PAYLOAD_BYTES = 32 * 1024 * 1024
-MAX_FILE_BYTES = 64 * 1024 * 1024
-MAX_TOTAL_BYTES = 256 * 1024 * 1024
+
 MAX_REFERENCES = 256
 MODEL_FILES = {"model.json", "thresholds.json", "feature-contract.json"}
 
@@ -44,45 +42,6 @@ def _json(payload: bytes) -> Any:
         raise ValueError("Nonfinite JSON")
 
     return json.loads(payload, object_pairs_hook=_unique, parse_constant=invalid)
-
-
-class AuditFailure(Exception):
-    def __init__(self, reason: str, *, mismatch: bool = False) -> None:
-        self.reason = reason
-        self.mismatch = mismatch
-
-
-@dataclass
-class ReadBudget:
-    remaining: int = MAX_TOTAL_BYTES
-
-    def read(self, path: Path, roots: list[Path], limit: int = MAX_FILE_BYTES) -> bytes:
-        """Restrict server-owned paths before opening; bound actual reads, not just stat size."""
-        try:
-            absolute = path.absolute()
-            if ".." in path.parts or any(
-                p.is_symlink() or p.is_junction() for p in (absolute, *absolute.parents)
-            ):
-                raise AuditFailure("unsafe_path")
-            resolved = absolute.resolve()
-            if not any(resolved.is_relative_to(root.resolve()) for root in roots):
-                raise AuditFailure("unsafe_path")
-            info = resolved.stat()
-            if not stat.S_ISREG(info.st_mode):
-                raise AuditFailure("unsafe_path")
-            allowed = min(limit, self.remaining)
-            if info.st_size > allowed:
-                raise AuditFailure("size_limit")
-            with resolved.open("rb") as stream:
-                content = stream.read(allowed + 1)
-            self.remaining -= len(content)
-            if len(content) > allowed:
-                raise AuditFailure("size_limit")
-            return content
-        except FileNotFoundError:
-            raise AuditFailure("missing_file") from None
-        except (OSError, ValueError, RuntimeError):
-            raise AuditFailure("read_failed") from None
 
 
 def _references(payload: bytes) -> tuple[list[AssetPin], tuple[UUID, str, str] | None]:
@@ -141,32 +100,9 @@ def _source(session: Session, pin: AssetPin, settings: Settings, budget: ReadBud
         raise AuditFailure("missing_record")
     if asset.content_hash != pin.sha256:
         raise AuditFailure("metadata_mismatch", mismatch=True)
-    if settings.source_artifact_dir is not None:
-        # Portable deployments locate immutable public source bytes by their pin,
-        # without rewriting the original workstation locator in the database.
-        mirror = settings.source_artifact_dir / f"{pin.sha256}.bin"
-        original = Path(asset.storage_path)
-        roots = [settings.raw_data_dir, settings.replay_bundle_dir]
-        # Newly ingested live sources need not exist in the frozen historical
-        # mirror. Fall back only for an absent mirror and a permitted local path.
-        try:
-            use_original = (
-                not mirror.exists()
-                and not mirror.is_symlink()
-                and any(original.resolve().is_relative_to(root.resolve()) for root in roots)
-            )
-        except (OSError, ValueError, RuntimeError):
-            raise AuditFailure("unsafe_path") from None
-        if use_original:
-            content = budget.read(original, roots)
-        else:
-            content = budget.read(mirror, [settings.source_artifact_dir])
-    else:
-        content = budget.read(
-            Path(asset.storage_path), [settings.raw_data_dir, settings.replay_bundle_dir]
-        )
-    if hashlib.sha256(content).hexdigest() != pin.sha256:
-        raise AuditFailure("checksum_mismatch", mismatch=True)
+    from firewatch.evidence.storage import source_bytes
+
+    source_bytes(asset.storage_path, pin.sha256, settings, budget)
 
 
 def _model(
@@ -261,4 +197,13 @@ def audit_artifacts(
         if states == {"unavailable"}
         else "partial"
     )
-    return ArtifactAudit.model_validate(dict(status=aggregate, reason="completed", items=items))
+    return ArtifactAudit.model_validate(
+        dict(
+            status=aggregate,
+            reason="completed",
+            items=items,
+            scope="referenced_sources_and_local_model"
+            if settings.supabase_storage_enabled
+            else "referenced_local_files",
+        )
+    )

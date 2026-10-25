@@ -153,7 +153,13 @@ def collect_enrichment(
     return pins
 
 
-def _verify_pins(session: Session, pins: EnrichmentPins, config: FeatureSpec, month: int) -> None:
+def _verify_pins(
+    session: Session,
+    pins: EnrichmentPins,
+    config: FeatureSpec,
+    month: int,
+    source_contents: dict[UUID, bytes] | None = None,
+) -> None:
     # Hashes bind source identity; normalized weather rows are checked against raw JSON too.
     total_bytes = 0
     for satellite in pins.satellite_assets:
@@ -177,12 +183,17 @@ def _verify_pins(session: Session, pins: EnrichmentPins, config: FeatureSpec, mo
             or asset.processing_version != NORMALIZER
         ):
             raise ValueError("Invalid pinned weather source")
-        path = Path(asset.storage_path)
-        total_bytes += path.stat().st_size
+        if source_contents is not None:
+            if identifier not in source_contents:
+                raise ValueError("Pinned weather bytes were not prepared")
+            raw = source_contents[identifier]
+        else:
+            path = Path(asset.storage_path)
+            with path.open("rb") as source:
+                raw = source.read(8 * 1024 * 1024 + 1)
+        total_bytes += len(raw)
         if total_bytes > 32 * 1024 * 1024:
             raise ValueError("Feature weather evidence size bound exceeded")
-        with path.open("rb") as source:
-            raw = source.read(8 * 1024 * 1024 + 1)
         if len(raw) > 8 * 1024 * 1024 or hashlib.sha256(raw).hexdigest() != asset.content_hash:
             raise ValueError("Pinned weather evidence checksum mismatch")
         request = WeatherRequest.model_validate(asset.request_metadata["request"])
@@ -253,6 +264,7 @@ def build_run_features(
     *,
     retrieval_cutoff: datetime | None = None,
     enrichment_pins: EnrichmentPins | None = None,
+    source_contents: dict[UUID, bytes] | None = None,
 ) -> list[FeatureSet]:
     """Caller owns transaction; cached inputs only. A retry never reselects enrichment."""
     if not session.in_transaction():
@@ -290,7 +302,7 @@ def build_run_features(
         )
         if retrieval_cutoff is not None and pins.retrieval_cutoff != cutoff:
             raise ValueError("Replay availability cutoff differs from pinned inputs")
-    _verify_pins(session, pins, config, run.as_of.month)
+    _verify_pins(session, pins, config, run.as_of.month, source_contents)
     computed = build_features(
         snapshots, selected, _enrichments(snapshots, pins), pins.satellite_assets, config
     )

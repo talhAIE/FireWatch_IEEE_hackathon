@@ -1,0 +1,54 @@
+name: Scheduled live research inference
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: firewatch-live-inference
+  cancel-in-progress: false
+jobs:
+  refresh:
+    # Opt in via a repository variable; never run on PRs or automatically on push.
+    if: vars.LIVE_INFERENCE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_ENV: production
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      ADMIN_API_TOKEN: ${{ secrets.ADMIN_API_TOKEN }}
+      FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+      SUPABASE_STORAGE_ENABLED: 'true'
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      SUPABASE_BUCKET: firewatch-evidence
+      ACTIVE_SCORER: registry
+      LIVE_SCORER: baseline-v1
+      MODEL_DIR: deploy/render/model
+      SOURCE_ARTIFACT_DIR: deploy/render/assets
+      RAW_DATA_DIR: data/raw
+      REPLAY_BUNDLE_DIR: data/replays
+      DB_POOL_SIZE: '2'
+      DB_MAX_OVERFLOW: '1'
+      DB_CONNECT_TIMEOUT_SECONDS: '30'
+      REFRESH_INTERVAL_MINUTES: '60'
+      WORKER_HEALTH_MAX_LAG_SECONDS: '7200'
+      CHAIN_ENABLED: 'false'
+      PYTHONPATH: src
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Always execute reviewed code from the triggering branch, never a PR ref.
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install locked runtime dependencies
+        run: python -m pip install --require-hashes -r requirements.lock
+      - name: Run bounded live batch
+        run: python -m firewatch.scheduled_worker --max-jobs 3
