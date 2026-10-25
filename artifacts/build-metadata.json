@@ -8,7 +8,7 @@
   },
   "migration_revision": "0003",
   "python": "3.12.10",
-  "revision": "8c162916c82bcbb173d7956845167ad6d364ca06",
+  "revision": "614cdd33c7f9622ed0becb90e459be327ce0bb22",
   "schema_version": "build-v1",
   "source_files_sha256": {
     "src/firewatch/__init__.py": "cbeed228ac6396dd2d03775cc3f425cd72d080b0b8a6c54f24ae9c704ef8aa3c",

@@ -12357,6 +12357,9 @@
     "output/cleanup-portability-tests.xml",
     "output/delivery-repair-readiness.json",
     "output/delivery-repair-tests.xml",
+    "output/deployed-api-audit-2026-10-25.json",
+    "output/deployed-api-audit-summary.json",
+    "output/deployed-api-evaluation-2026-10-25.md",
     "output/installed-wheel-tests.xml",
     "output/local-regression.xml",
     "output/pdf/FireWatch_AI_Frontend_Design_Guide.pdf",
@@ -12368,7 +12371,7 @@
     "Untracked files not explicitly reviewed, including secrets, runtimes and caches",
     "The delivery inventory itself (avoids a circular checksum)"
   ],
-  "files": 12846,
+  "files": 12849,
   "files_sha256": {
     ".dockerignore": "f1f57eff75dabc65481a9c8658ea4a23519f01e0da9d01e2da77bf660b8eb1b8",
     ".editorconfig": "dd7252340ff5db6afaf9c23c5a42868e3cf4494d26fa1000100b8826d4fb834b",
@@ -12427,7 +12430,7 @@
     "LICENSE": "7f80095a699d09407bc5d4425561f71c2d8484ebf6213fbb85ec704e24107176",
     "README.md": "a3697b3b27b95890d2dd5b9dd36a747ca41ba332176c96d25be5f2674a51bbdc",
     "alembic.ini": "b53461cdfe8e53152afba4656427e42d6319b543741b0512913cb00b395ce9b0",
-    "artifacts/build-metadata.json": "420ed13feca5005be31dce5d78238f4b5a09f46e8d0cd63586676f54120f173e",
+    "artifacts/build-metadata.json": "b94596cce778eeeb4793bb3cb52194602cec896bae32e5b29f23b812e77e4ca2",
     "artifacts/coverage.xml": "09b228632f94b323c4e3a180cd2681f6618d6d5f4a6bd57290feea4dad456bba",
     "artifacts/e2e-offline-results.xml": "c92ade9bb57b8a13d5b390d25c031fe24ac41701eaed11bbd09c6db5585324bb",
     "artifacts/enriched-real-api-examples.json": "2a59bfe9421008627add4e6e8614e28a083a2859a5add8737b9e8e0785dcb588",
@@ -24954,6 +24957,9 @@
     "output/cleanup-portability-tests.xml": "1dbaddd1c1268a5a2d4d3497bb0c1ea19c21fd72b90cd31e2095987698060a25",
     "output/delivery-repair-readiness.json": "a201891c0815be96af71ee83f1054dabb5fda05c42c3d2d4f5366e6cee7f4be6",
     "output/delivery-repair-tests.xml": "89ccff7aeec0ab74297900a5818bd16b486aa94e074111dde0b0c2154b848681",
+    "output/deployed-api-audit-2026-10-25.json": "9c88311e596f919749a4b068c1f94f73dd5f65d5cd5cc6eb8aab675d08ff5d56",
+    "output/deployed-api-audit-summary.json": "d370ffb4ed9d4f236051dae3de4aea356a068ff96392207f7aae825a394132ec",
+    "output/deployed-api-evaluation-2026-10-25.md": "05081bbccab08e8ca32166597285ac5f9b92b40d6c84257cc25ce533b689544e",
     "output/installed-wheel-tests.xml": "fa51d4c63742643ea41512dc012799c5acf2073f360bea09d21cc37dde5fa19f",
     "output/local-regression.xml": "42c5fea5a716484fbde50ff99973e5535b9171d41f525088fe8421ccd7a55265",
     "output/pdf/FireWatch_AI_Frontend_Design_Guide.pdf": "05a7867f0b56007c0ab9814d122933b448b087f5cfbce903eb08405691622910",
@@ -25220,5 +25226,5 @@
   "hash_semantics": "lf-normalized-text-exact-binary-v1",
   "inventory_excludes_itself": true,
   "schema_version": "branch-delivery-inventory-v2",
-  "total_bytes": 1482055024
+  "total_bytes": 1486691717
 }
