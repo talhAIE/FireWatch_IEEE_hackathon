@@ -329,14 +329,18 @@ class ArtifactInspector:
 
 
 def model_metadata(
-    session: Session, settings: Settings, artifacts: ArtifactInspector
+    session: Session,
+    settings: Settings,
+    artifacts: ArtifactInspector,
+    *,
+    mode: RunMode | None = None,
 ) -> ModelMetadata:
     limitations = [
         "Satellite-observed strengthening is a research proxy, not physical fire severity.",
         "Priority categories remain provisional; approval does not establish physical severity.",
     ]
     try:
-        version = selected_version(session, settings)
+        version = selected_version(session, settings, mode=mode)
     except ModelRegistryError:
         version = "registry"
     if version in BASELINE_VERSIONS:

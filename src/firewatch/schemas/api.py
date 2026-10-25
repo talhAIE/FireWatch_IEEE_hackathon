@@ -260,6 +260,9 @@ class WorkerObservation(DTO):
 
 
 class LiveReadiness(DTO):
+    scorer: ModelMetadata | None = Field(
+        default=None, description="Live scorer capabilities, independent of historical selection."
+    )
     configuration_ready: bool = Field(
         default=False,
         description="Configuration check only; does not prove worker liveness.",

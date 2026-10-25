@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     max_replay_window_days: int = Field(default=31, ge=1, le=366)
     max_region_area_degrees2: float = Field(default=100, gt=0, le=1000)
     active_scorer: str = "baseline-v1"
+    live_scorer: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Explicit live-only scorer; unset inherits ACTIVE_SCORER without fallback.",
+    )
     refresh_interval_minutes: int = Field(default=15, ge=1, le=1440)
     worker_max_attempts: int = Field(default=5, ge=1, le=20)
     worker_lease_seconds: int = Field(default=120, ge=15, le=3600)

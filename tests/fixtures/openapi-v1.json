@@ -1334,6 +1334,17 @@
             "description": "Recent observations in the live head; not proof of continuous ingestion.",
             "title": "Recent Live Data Available",
             "type": "boolean"
+          },
+          "scorer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Live scorer capabilities, independent of historical selection."
           }
         },
         "title": "LiveReadiness",

@@ -75,6 +75,7 @@ def operational_status(
     if enabled and not eligible:
         blockers.append("NO_REGION_WITHIN_LIVE_SCORER_SCOPE")
     live = LiveReadiness(
+        scorer=model,
         configuration_ready=not blockers,
         eligible_region_ids=eligible,
         recent_live_data_available=latest_live_observation is not None

@@ -589,5 +589,11 @@ def status(request: Request, session: ReadSession) -> StatusView:
         chain_enabled=settings.chain_enabled,
         weather_latest_retrieved_at=weather_time,
         climate_baseline_count=baseline_count,
-        **operational_status(session, settings, metadata, clock, live_observation),
+        **operational_status(
+            session,
+            settings,
+            model_metadata(session, settings, request.app.state.artifacts, mode=RunMode.LIVE),
+            clock,
+            live_observation,
+        ),
     )

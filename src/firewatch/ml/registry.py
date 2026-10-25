@@ -25,9 +25,14 @@ class ModelScoringError(ValueError):
     """Required inputs or approved artifact failed at scoring; no scores are published."""
 
 
-def selected_version(session: Session, settings: Settings) -> str:
-    if settings.active_scorer != "registry":
-        return settings.active_scorer
+def selected_version(session: Session, settings: Settings, *, mode: RunMode | None = None) -> str:
+    configured = (
+        settings.live_scorer
+        if mode == RunMode.LIVE and settings.live_scorer is not None
+        else settings.active_scorer
+    )
+    if configured != "registry":
+        return configured
     active = session.get(ModelActivation, "default")
     if active is None:
         raise ModelRegistryError("No active approved model; configure an explicit baseline")

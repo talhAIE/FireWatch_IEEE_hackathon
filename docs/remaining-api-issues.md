@@ -93,15 +93,21 @@ was run as part of these local code repairs.
    API and worker. Use `deploy/live-research.env.example` for container settings.
    For native Windows, override the container raw/model paths with local writable
    paths; the source mirror can remain `deploy/render/assets`.
-2. Explicitly choose `ACTIVE_SCORER=baseline-v1` for the research live profile on
-   both processes, or use a separately approved live supervised scorer. Do not
+2. Explicitly choose `LIVE_SCORER=baseline-v1` for the research live profile on
+   both processes, retaining `ACTIVE_SCORER=registry` for historical selection,
+   or use a separately approved live supervised scorer. Unset `LIVE_SCORER`
+   inherits the active scorer and never silently substitutes a baseline. Inspect
+   `/api/v1/status.live_readiness.scorer` for live capabilities. Do not
    broaden the historical forest's scope to bypass approval.
 3. Review, then explicitly apply the opt-in region configuration with
    `python -m firewatch.cli seed-regions --config configs/regions-live-research.yaml`.
    This command writes region configuration; it was not run against Neon here.
 4. Start the API and a dedicated `python -m firewatch.worker` process. The worker
    owns scheduling; never start its scheduler in an ASGI lifespan. Use a supervisor
-   and persistent raw-data storage. Render Free alone does not supply a persistent
+   and persistent raw-data storage accessible to both processes at the configured
+   paths. A worker on a different machine cannot provide evidence files through
+   its local filesystem to the API; configure shared storage before publishing
+   live results. Render Free alone does not supply a persistent
    raw volume or a separate free background-worker service. No paid resources are
    created by this change.
 5. Confirm completed `mode=live` runs, recent satellite acquisition times, source
@@ -128,3 +134,20 @@ model weights, or chain transactions were changed.
 The public contract and field dictionary are regenerated. Frozen historical
 handoff artifacts and the earlier deployed audit remain timestamped records of
 their original state. Credentials remain ignored. This commit is local only.
+
+## Live inference follow-up (2026-10-25)
+
+`LIVE_SCORER` selects live admission and scheduling independently of the default
+historical model. The worker freezes the selected version in each job, so later
+environment changes do not change a retry's scorer. Both explicit model versions
+and `registry` still require reviewed live scope. There is no automatic fallback.
+Status reports live scorer metadata under `live_readiness.scorer`; the existing
+`scorer` field and `/models/current` retain default model semantics.
+
+The scheduler skips unavailable approvals without preventing consumption of
+existing frozen jobs, and honors smaller configured refresh windows. Provider
+fetches still include the context days required for features-v1 activity windows.
+Regression coverage includes API admission, registry isolation, live publication,
+provider retries, weather degradation, artifact verification and wire contracts.
+No live model approval, hosted configuration, region activation or Neon data was
+changed by this follow-up. The forest still requires independent live evaluation.

@@ -300,8 +300,9 @@ def test_anchor_only_queue_is_left_for_anchor_executor(work):
 
 
 @pytest.mark.parametrize("degraded", [False, True])
+@pytest.mark.parametrize("separate_live_scorer", [False, True])
 def test_live_pipeline_reuses_source_chunks_and_publishes_only_after_evidence(
-    empty_engine, tmp_path, degraded
+    empty_engine, tmp_path, degraded, separate_live_scorer
 ):
     from refresh_factory import FakeRefreshClient
 
@@ -315,7 +316,11 @@ def test_live_pipeline_reuses_source_chunks_and_publishes_only_after_evidence(
         area.enabled = True
         identifier = queued(session, area.id, mode="live")
         area_id = area.id
-    config = settings(tmp_path)
+    config = settings(
+        tmp_path,
+        active_scorer="registry" if separate_live_scorer else "baseline-v1",
+        live_scorer="baseline-v1" if separate_live_scorer else None,
+    )
     client = FakeRefreshClient(tmp_path / "live", clock=lambda: CLOCK)
     client.frp = "150"
     client.failures[(Product.NOAA21_NRT, (T - timedelta(hours=48)).date())] = [
